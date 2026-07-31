@@ -1,0 +1,59 @@
+# ==============================================================================
+# Script 5: Figure 4 - Motif Heatmap (Quasispecies Framework)
+# ==============================================================================
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(ComplexHeatmap)
+  library(circlize)
+})
+
+# --- 1. Input Data and Prior Knowledge ---
+raw_data <- read.csv("Matrix_Quasispecies_Features.csv", stringsAsFactors = FALSE, check.names = FALSE)
+
+# Dynamically link the results from Script 2 (Prior Knowledge Linkage)
+if(file.exists("Table_S1_Haldane_Anscombe_Stats.csv")) {
+  fig1_results <- read.csv("Table_S1_Haldane_Anscombe_Stats.csv")
+  forest_sig_muts <- fig1_results %>% filter(Odds_Ratio > 1 & q_Value < 0.05) %>% pull(Mutation) %>% unique()
+} else {
+  forest_sig_muts <- c("N27S", "S39N", "A23V", "A21T", "N27G", "K14R", "D167E", "I72V", "D278N", "K211R", "K136H", "T218I", "I84M", "L234I", "V31I")
+}
+known_drm_list <- c("T66I", "E92Q", "G118R", "E138K", "E138A", "E138T", "G140S", "G140A", "Y143R", "N155H", "E157Q", "G163K", "S230R", "R263K")
+glasso_hubs <- c("L74M", "L74I", "V151I", "D232N", "D286N", "H171Y", "G193E", "M50I")
+all_target_muts <- unique(c(known_drm_list, forest_sig_muts, glasso_hubs))
+
+# --- 2. Matrix Extraction ---
+df_clean <- raw_data %>%
+  rename_with(~ "Status", any_of(c("Treatment", "Treatment_Group", "treatment_group"))) %>%
+  mutate(
+    Status = factor(ifelse(grepl("ART|Treated|Yes", Status, ignore.case = TRUE), "Treated", "Untreated"), levels = c("Untreated", "Treated")),
+    Subtype_Group = factor(case_when(str_trim(toupper(Subtype)) == "01_AE" ~ "CRF01_AE", str_trim(toupper(Subtype)) %in% c("07_BC", "08_BC", "C", "BC") ~ "CRF07/08_BC", TRUE ~ "Others"))
+  ) %>% filter(Subtype_Group != "Others")
+
+mut_cols <- intersect(names(raw_data), all_target_muts)
+mat_data <- as.matrix(raw_data[raw_data$SequenceID %in% df_clean$SequenceID, mut_cols, drop = FALSE] %>%
+                        mutate(across(everything(), ~ifelse(is.na(.) | . %in% c("0", "", "WT"), 0, 1))))
+rownames(mat_data) <- df_clean$SequenceID
+
+# --- 3. Aesthetics and Annotation Construction ---
+col_status <- c("Untreated" = "#4DBBD5FF", "Treated" = "#E64B35FF")
+col_subtype <- c("CRF01_AE" = "#7E6148FF", "CRF07/08_BC" = "#91D1C2FF")
+mut_attr <- data.frame(Mutation = colnames(mat_data)) %>%
+  mutate(Domain = case_when(as.numeric(gsub("[^0-9]", "", Mutation)) <= 100 ~ "NTD", as.numeric(gsub("[^0-9]", "", Mutation)) <= 200 ~ "CCD", TRUE ~ "CTD"),
+         Category = case_when(Mutation %in% known_drm_list ~ "Known DRM", Mutation %in% glasso_hubs ~ "GLasso Hub", Mutation %in% forest_sig_muts ~ "Forest Plot Sig", TRUE ~ "Others"))
+
+ha_top <- columnAnnotation(Domain = mut_attr$Domain, Significance = mut_attr$Category, col = list(Domain = c("NTD"="#8491B4FF", "CCD"="#4DBBD5FF", "CTD"="#00A087FF"), Significance = c("Known DRM"="#DC0000FF", "GLasso Hub"="#00A087FF", "Forest Plot Sig"="#3C5488FF", "Others"="#BBBBBB")), annotation_name_side = "left")
+ha_left <- rowAnnotation(Subtype = df_clean$Subtype_Group, Status = df_clean$Status, col = list(Subtype = col_subtype, Status = col_status), show_annotation_name = FALSE)
+
+# --- 4. Heatmap Generation ---
+final_ht <- Heatmap(
+  mat_data, name = "Mutation", col = colorRamp2(c(0, 1), c("#FFFFFF", "#DC0000FF")),
+  rect_gp = gpar(col = NA), clustering_distance_rows = "binary", clustering_distance_columns = "binary",
+  clustering_method_rows = "ward.D2", column_km = 3, row_split = df_clean$Subtype_Group,
+  row_title_rot = 0, top_annotation = ha_top, left_annotation = ha_left, show_column_names = FALSE, show_row_names = FALSE,
+  column_title = "Figure 4: Mutational Motifs & Domain Landscape", column_title_gp = gpar(fontsize = 15, fontface = "bold")
+)
+
+pdf("Figure4_Multivariate_Motif_Heatmap.pdf", width = 14, height = 9)
+draw(final_ht, merge_legend = TRUE, heatmap_legend_side = "right")
+dev.off()
+message("Execution Complete: Figure 4 successfully generated.")

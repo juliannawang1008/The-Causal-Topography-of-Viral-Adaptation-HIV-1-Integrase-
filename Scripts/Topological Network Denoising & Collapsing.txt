@@ -1,0 +1,64 @@
+# ==============================================================================
+# Script 1: Track B Advanced Denoising & Collapse Module
+# ==============================================================================
+library(dplyr)
+library(tidyr)
+library(purrr)
+
+clean_track_B_topology <- function(file_path) {
+  df <- read.csv(file_path, stringsAsFactors = FALSE, check.names = FALSE)
+  
+  meta_cols <- c("SequenceID", "Subtype", "Year", "Treatment", "Treatment_Group", "treatment_group")
+  meta_cols <- intersect(meta_cols, names(df))
+  
+  df_meta <- df[, meta_cols, drop = FALSE]
+  df_mut <- df[, setdiff(names(df), meta_cols), drop = FALSE]
+  
+  # Standardize mutation values into a 0/1 binary matrix
+  df_mut <- mutate_all(df_mut, function(x) {
+    x <- as.character(x)
+    ifelse(is.na(x) | x == "0" | x == "" | toupper(x) == "WT", 0, 1)
+  })
+  
+  new_mut_list <- list()
+  for (col in names(df_mut)) {
+    # Extract reference amino acid, position, and mutation suffix
+    match_res <- regmatches(col, regexec("^([A-Za-z]+)(\\d+)(.*)$", col))[[1]]
+    if (length(match_res) == 4) {
+      ref <- toupper(match_res[2])
+      pos <- match_res[3]
+      suffix <- toupper(match_res[4])
+      clean_suffix <- gsub(ref, "", suffix)
+      clean_suffix <- gsub("[^A-Z]", "", clean_suffix) 
+      
+      if (nchar(clean_suffix) > 0) {
+        split_muts <- strsplit(clean_suffix, "")[[1]]
+        for (m in split_muts) {
+          pure_node_name <- paste0(ref, pos, m) 
+          if (is.null(new_mut_list[[pure_node_name]])) {
+            new_mut_list[[pure_node_name]] <- df_mut[[col]]
+          } else {
+            # Logical OR for matching nodes to collapse redundancies
+            new_mut_list[[pure_node_name]] <- new_mut_list[[pure_node_name]] | df_mut[[col]]
+          }
+        }
+      }
+    }
+  }
+  
+  df_pure_mut <- as.data.frame(lapply(new_mut_list, function(x) ifelse(x > 0, 1, 0)), check.names = FALSE)
+  df_final <- cbind(df_meta, df_pure_mut)
+  return(df_final)
+}
+
+# --- Execution Block ---
+# Assuming the unfiltered raw matrix file is named Fasta_Topological_Denoised.csv 
+file_track_B_input <- "Fasta_Topological_Denoised.csv" 
+if(file.exists(file_track_B_input)) {
+  df_B_denoised <- clean_track_B_topology(file_track_B_input)
+  # Output as a standardized, purified topological feature matrix
+  write.csv(df_B_denoised, "Matrix_Topological_Binary.csv", row.names = FALSE)
+  message("[Track B Denoising] Success! Output finalized: Matrix_Topological_Binary.csv")
+} else {
+  message("Warning: If no further collapsing is needed, skip this step and use the existing Matrix_Topological_Binary.csv directly.")
+}

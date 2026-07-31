@@ -1,0 +1,82 @@
+# ==============================================================================
+# Script 2: Figure 1 - Bubble Staircase Forest Plot (Haldane-Anscombe Adjusted)
+# ==============================================================================
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(ggplot2)
+})
+
+# --- 1. Data Initialization ---
+file_input <- "Matrix_Quasispecies_Features.csv"
+if (!file.exists(file_input)) stop("Error: Raw data file not found.")
+
+raw_data <- read.csv(file_input, stringsAsFactors = FALSE, check.names = FALSE)
+
+df_clean <- raw_data %>%
+  rename_with(~ "Treatment", any_of(c("Treatment_Group", "treatment_group"))) %>%
+  filter(!is.na(Treatment) & Treatment != "") %>%
+  mutate(
+    Treatment = factor(ifelse(grepl("ART|Treated|Yes", Treatment, ignore.case = TRUE), "Treated", "Untreated"), 
+                       levels = c("Untreated", "Treated")),
+    Subtype_Clean = str_trim(toupper(as.character(Subtype))),
+    Analysis_Group_Raw = case_when(
+      Subtype_Clean == "01_AE" ~ "CRF01_AE (Dominant Lineage)",
+      Subtype_Clean %in% c("07_BC", "08_BC", "C", "BC_LINEAGE", "BC") ~ "CRF07/08_BC (Recombinants)",
+      TRUE ~ "Others"
+    )
+  ) %>% filter(Analysis_Group_Raw != "Others") %>%
+  mutate(Analysis_Group = factor(Analysis_Group_Raw, levels = c("CRF01_AE (Dominant Lineage)", "CRF07/08_BC (Recombinants)")))
+
+mut_cols <- setdiff(names(raw_data), c("SequenceID", "Subtype", "Year", "Treatment", "Treatment_Group", "treatment_group"))
+for(m in mut_cols) {
+  val <- as.character(df_clean[[m]])
+  df_clean[[m]] <- case_when(is.na(val) ~ NA_real_, val %in% c("0", "", "WT") ~ 0, TRUE ~ 1)
+}
+
+# --- 2. Core Statistical Engine ---
+calculate_stats <- function(df, group_name) {
+  res_list <- lapply(mut_cols, function(mut) {
+    sub_df <- df[!is.na(df[[mut]]), c("Treatment", mut)]
+    tbl <- table(sub_df$Treatment, sub_df[[mut]])
+    if (all(dim(tbl) == c(2, 2))) {
+      a <- tbl[2, 2]; b <- tbl[2, 1]; c <- tbl[1, 2]; d <- tbl[1, 1]
+      # Haldane-Anscombe correction
+      adj_or <- ((a + 0.5) * (d + 0.5)) / ((b + 0.5) * (c + 0.5))
+      se_ln_or <- sqrt(1/(a+0.5) + 1/(b+0.5) + 1/(c+0.5) + 1/(d+0.5))
+      ci_low <- exp(log(adj_or) - 1.96 * se_ln_or)
+      ci_high <- exp(log(adj_or) + 1.96 * se_ln_or)
+      ft <- fisher.test(tbl)
+      data.frame(Mutation = mut, Analysis_Group = group_name, Case_Count = a + c, Odds_Ratio = adj_or, CI_Lower = ci_low, CI_Upper = ci_high, P_Value = ft$p.value, stringsAsFactors = FALSE)
+    } else { NULL }
+  })
+  res_df <- bind_rows(res_list[!sapply(res_list, is.null)])
+  res_df$q_Value <- p.adjust(res_df$P_Value, method = "BH")
+  return(res_df)
+}
+
+stat_final <- bind_rows(
+  calculate_stats(df_clean[df_clean$Analysis_Group == "CRF01_AE (Dominant Lineage)", ], "CRF01_AE (Dominant Lineage)"),
+  calculate_stats(df_clean[df_clean$Analysis_Group == "CRF07/08_BC (Recombinants)", ], "CRF07/08_BC (Recombinants)")
+)
+
+# --- 3. Visualization and High-Resolution Export ---
+global_colors <- c("CRF01_AE (Dominant Lineage)" = "#7E6148FF", "CRF07/08_BC (Recombinants)" = "#91D1C2FF")
+plot_data <- stat_final %>%
+  filter(Odds_Ratio > 1 & q_Value < 0.05) %>%
+  group_by(Analysis_Group) %>% arrange(Analysis_Group, desc(Odds_Ratio)) %>% mutate(Rank = row_number()) %>% ungroup()
+
+p1 <- ggplot(plot_data, aes(x = Odds_Ratio, y = reorder(Mutation, -Rank), color = Analysis_Group)) +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "darkgray", linewidth = 0.8) +
+  geom_errorbarh(aes(xmin = CI_Lower, xmax = CI_Upper), height = 0, linewidth = 0.8, alpha = 0.7) +
+  geom_point(aes(size = Case_Count), shape = 16, alpha = 0.9) + 
+  facet_wrap(~ Analysis_Group, scales = "free_y") +
+  scale_x_log10(breaks = c(1, 5, 10, 50, 100)) +
+  scale_color_manual(values = global_colors, guide = "none") +
+  scale_size_continuous(range = c(2, 7), name = "Mutation\nAbundance (N)") +
+  theme_minimal(base_size = 14) +
+  labs(title = "Figure 1: Subtype-Specific Resistance Mutational Signatures", subtitle = "Haldane-Anscombe Adjusted OR, BH-FDR corrected (q < 0.05)", x = "Adjusted Odds Ratio (Therapy vs Naive, Log10 Scale)", y = "Therapy-Driven Dominant Mutations") +
+  theme(legend.position = "right", legend.title = element_text(face = "bold", size = 10), strip.background = element_rect(fill = "#F0F0F0", color = NA), strip.text = element_text(face = "bold", size = 13), panel.grid.major.y = element_line(color = "gray90", linetype = "dotted"), panel.grid.minor = element_blank(), axis.text.y = element_text(face = "italic"), axis.line = element_blank(), panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8))
+
+ggsave("Figure1_Adaptive_Landscape_Forest.pdf", p1, width = 11, height = 7, dpi = 300)
+write.csv(stat_final, "Table_S1_Haldane_Anscombe_Stats.csv", row.names = FALSE)
+message("Execution Complete: Figure 1 and Table S1 successfully generated.")

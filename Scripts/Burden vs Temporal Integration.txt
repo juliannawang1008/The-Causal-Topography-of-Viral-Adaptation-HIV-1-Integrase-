@@ -1,0 +1,53 @@
+# ==============================================================================
+# Script 6: Complexity Disparity & Temporal Consolidation (Track A vs B)
+# ==============================================================================
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(ggpubr)
+})
+
+theme_nature <- theme_minimal(base_size = 14) + theme(plot.title = element_text(face = "bold", size = 18), axis.line = element_line(color = "black", linewidth = 0.8), strip.text = element_text(face = "bold", size = 14, color = "white"), strip.background = element_rect(fill = "#2C3E50", color = NA))
+
+# --- Core Plotting Engine ---
+run_analysis_pipeline <- function(file_path, track_name) {
+  if(!file.exists(file_path)) return(NULL)
+  raw_data <- read.csv(file_path, stringsAsFactors = FALSE)
+  
+  clean_data <- raw_data %>%
+    rename_with(~"Year", matches("Year|date|sampling", ignore.case = TRUE)) %>%
+    mutate(Year_Int = suppressWarnings(as.numeric(str_extract(as.character(Year), "\\d{4}")))) %>% filter(!is.na(Year_Int), Year_Int >= 2019) %>%
+    mutate(Group_Label = case_when(str_detect(Subtype, "01_AE") ~ "Group A (CRF01_AE)", str_detect(Subtype, "07_BC|08_BC|^C|BC") ~ "Group C (BC-Recombinants)", TRUE ~ NA_character_)) %>% filter(!is.na(Group_Label))
+  
+  mut_cols <- clean_data %>% select(matches("^[A-Z]\\d+[A-Z]$")) %>% colnames()
+  top_15 <- names(sort(colSums(clean_data[, mut_cols], na.rm = TRUE), decreasing = T))[1:15]
+  
+  # Temporal Heatmap Formulation
+  heatmap_df <- clean_data %>% select(Group_Label, Year_Int, all_of(top_15)) %>% pivot_longer(cols = all_of(top_15), names_to = "Mutation", values_to = "Val") %>% group_by(Group_Label, Year_Int, Mutation) %>% summarise(Prev = mean(Val, na.rm = TRUE), .groups = "drop") %>% mutate(Year_Char = as.character(Year_Int))
+  p_temp <- ggplot(heatmap_df, aes(x = Year_Char, y = factor(Mutation, levels = rev(top_15)), fill = Prev)) + geom_tile(color = "white", linewidth = 0.5) + facet_wrap(~Group_Label) + scale_fill_gradientn(colors = c("#FFFFFF", "#FFDDC1", "#FF6B6B", "#C0392B", "#641E16"), values = scales::rescale(c(0, 0.05, 0.3, 0.7, 1)), name = "Prevalence", labels = scales::percent, limits = c(0, 1)) + labs(title = paste0("Temporal Consolidation (", track_name, ")"), x = "Sampling Year", y = NULL) + theme_nature + theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1))
+  
+  # Burden Boxplot Formulation
+  burden_df <- clean_data %>% mutate(Burden = rowSums(select(., all_of(mut_cols)), na.rm = TRUE))
+  stat_res <- compare_means(Burden ~ Group_Label, data = burden_df, method = "wilcox.test")
+  p_str <- ifelse(stat_res$p.adj < 0.0001, "P < 0.0001 ****", paste0("P = ", signif(stat_res$p.adj, 2)))
+  
+  p_burd <- ggplot(burden_df, aes(x = Group_Label, y = Burden, fill = Group_Label)) + geom_violin(alpha = 0.4, scale = "width", color = NA) + geom_boxplot(width = 0.15, color = "black", alpha = 0.9, outlier.shape = NA) + geom_jitter(width = 0.2, size = 1.5, alpha = 0.3, color = "grey30") + geom_signif(comparisons = list(c("Group A (CRF01_AE)", "Group C (BC-Recombinants)")), map_signif_level = FALSE, annotations = p_str, textsize = 5, vjust = -0.2) + scale_fill_manual(values = c("Group A (CRF01_AE)" = "#FA8072", "Group C (BC-Recombinants)" = "#87CEEB")) + labs(title = paste0("Mutational Burden (", track_name, ")"), y = "Mutation Burden (Count/Score)", x = NULL) + theme_nature + theme(legend.position = "none")
+  
+  return(list(p_temp = p_temp, p_burd = p_burd))
+}
+
+# --- Execution and Output (Matching screenshot filenames exactly) ---
+res_a <- run_analysis_pipeline("Matrix_Quasispecies_Features.csv", "Bio-Reality Track")
+if(!is.null(res_a)) {
+  # Exact match for screenshot: Figure5_Lineage_Mutational_Burden_TrackA.pdf
+  ggsave("Figure5_Lineage_Mutational_Burden_TrackA.pdf", res_a$p_burd, width = 8, height = 8, device = cairo_pdf)
+}
+
+res_b <- run_analysis_pipeline("Matrix_Topological_Binary.csv", "Topological Track")
+if(!is.null(res_b)) {
+  # Exact match for screenshot: Figure_S1_Lineage_Mutational_Burden_TrackB.pdf
+  ggsave("Figure_S1_Lineage_Mutational_Burden_TrackB.pdf", res_b$p_burd, width = 8, height = 8, device = cairo_pdf)
+  # Exact match for screenshot: Figure_S2_Temporal Consolidation of Resistance_TrackB.pdf
+  ggsave("Figure_S2_Temporal Consolidation of Resistance_TrackB.pdf", res_b$p_temp, width = 12, height = 8, device = cairo_pdf)
+}
+
+message("Execution Complete: Figure 5 and Supplementary Temporal/Burden Plots successfully generated.")

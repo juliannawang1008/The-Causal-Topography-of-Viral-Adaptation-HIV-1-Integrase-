@@ -1,0 +1,92 @@
+# ==============================================================================
+# Script 4: Figure 3 - Bayesian Directed Acyclic Graphs (Topology Kinetics)
+# ==============================================================================
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(bnlearn)
+  library(parallel)
+  library(igraph)
+  library(ggraph)
+  library(tidygraph)
+})
+
+file_target <- "Matrix_Topological_Binary.csv"
+raw_data <- read.csv(file_target, stringsAsFactors = FALSE, check.names = FALSE)
+df_clean <- raw_data %>%
+  rename_with(~ "Treatment", any_of(c("Treatment_Group", "treatment_group"))) %>%
+  filter(!is.na(Treatment) & Treatment != "") %>%
+  mutate(Subtype = as.character(Subtype),
+         Analysis_Group_Raw = case_when(Subtype == "01_AE" ~ "CRF01_AE (Dominant Lineage)", Subtype %in% c("07_BC", "08_BC", "C", "BC", "01C") ~ "CRF07/08_BC (Recombinants)", TRUE ~ "Others")) %>% filter(Analysis_Group_Raw != "Others")
+
+known_drm_list <- c("T66I", "E92Q", "G118R", "E138K", "E138A", "E138T", "G140S", "G140A", "Y143R", "N155H", "E157Q", "G163K", "S230R", "R263K")
+forest_sig_list <- c("N27S", "S39N", "A23V", "A21T", "N27G", "K14R", "D167E", "I72V", "D278N", "K211R", "K136H", "T218I", "I84M", "L234I", "V31I", "G163E", "T112I")
+glasso_hubs <- c("L74M", "L74I", "V151I", "D232N", "D286N", "H171Y", "G193E", "M50I")
+available_muts <- intersect(unique(c(known_drm_list, forest_sig_list, glasso_hubs)), names(df_clean))
+
+run_parallel_bayesian <- function(subtype_label) {
+  sub_data <- df_clean %>% filter(Analysis_Group_Raw == subtype_label) %>% select(all_of(available_muts)) %>% mutate(across(everything(), ~ factor(., levels = c(0, 1))))
+  sub_data <- sub_data[, sapply(sub_data, function(x) length(unique(x)) > 1)]
+  cores <- max(1, detectCores() - 2); cl <- makeCluster(cores); clusterExport(cl, c("sub_data"), envir = environment())
+  set.seed(42); boot_strength <- boot.strength(sub_data, R = 200, cluster = cl, algorithm = "hc", algorithm.args = list(score = "bic"))
+  stopCluster(cl)
+  avg_net <- averaged.network(boot_strength, threshold = 0.5)
+  return(list(net = avg_net, strength = boot_strength))
+}
+
+visualize_causal_path <- function(res, title_text) {
+  if (nrow(res$net$arcs) == 0) return(NULL) 
+  edge_df <- as.data.frame(res$net$arcs) %>% left_join(res$strength, by = c("from", "to")) %>% mutate(strength = as.numeric(strength))
+  net_igraph <- graph_from_data_frame(d = edge_df, directed = TRUE)
+  nodes_info <- data.frame(name = V(net_igraph)$name) %>% mutate(pos = as.numeric(gsub("[^0-9]", "", name)), Domain = case_when(pos <= 50 ~ "NTD (1-50)", pos <= 212 ~ "CCD (51-212)", TRUE ~ "CTD (213-288)"), Clinical_Anchor = case_when(name %in% known_drm_list ~ "Known DRMs", name %in% forest_sig_list ~ "Forest Plot Sig", name %in% glasso_hubs ~ "GLasso Hubs", TRUE ~ "Novel/Polymorphisms"))
+  g_tidy <- as_tbl_graph(net_igraph) %>% left_join(nodes_info, by = "name")
+  set.seed(123)
+  
+  p <- ggraph(g_tidy, layout = "fr") + 
+    geom_edge_fan(aes(edge_width = strength), alpha = 0.65, color = "grey60", arrow = arrow(type = "closed", length = unit(2.5, 'mm'), angle = 20), start_cap = circle(3.5, 'mm'), end_cap = circle(4.5, 'mm')) +
+    geom_node_point(aes(color = Domain, shape = Clinical_Anchor, size = centrality_degree()), alpha = 1, stroke = 1.2) +
+    geom_node_text(aes(label = name), repel = TRUE, fontface = "bold", size = 3.5, bg.color = "white", bg.r = 0.18, segment.color = "grey70", segment.size = 0.3) +
+    scale_edge_width_continuous(range = c(0.4, 1.2), name = "Causal Strength\n(Boot Support)") +
+    scale_size_continuous(range = c(4, 9), guide = "none") +
+    scale_color_manual(values = c("NTD (1-50)" = "#2E86C1", "CCD (51-212)" = "#239B56", "CTD (213-288)" = "#CB4335")) +
+    scale_shape_manual(values = c("Known DRMs" = 17, "Forest Plot Sig" = 15, "GLasso Hubs" = 18, "Novel/Polymorphisms" = 16)) +
+    theme_graph(base_family = "sans") +
+    labs(title = title_text, subtitle = "Directed paths indicate causal mutation flow based on structural Bayesian learning.") +
+    theme(legend.position = "right", plot.subtitle = element_text(size = 10, color = "grey30", margin = margin(b = 10)))
+  
+  return(p)
+}
+
+# --- Output Rendering Core Loop ---
+all_edges <- list()
+SUBTYPES_ANALYSIS <- c("CRF01_AE (Dominant Lineage)", "CRF07/08_BC (Recombinants)")
+
+for (st in SUBTYPES_ANALYSIS) {
+  res <- run_parallel_bayesian(st)
+  
+  if (st == "CRF01_AE (Dominant Lineage)") {
+    p_filename <- "Figure3_Causal_DAG.pdf"
+    title_text <- "Evolutionary Causal Network: CRF01_AE"
+  } else {
+    p_filename <- "Figure3_Causal_DAG_BC-Related lineages.pdf"
+    title_text <- "Evolutionary Causal Network: BC-Related lineages"
+  }
+  
+  p <- visualize_causal_path(res, title_text)
+  
+  if (!is.null(p)) {
+    ggsave(p_filename, p, width = 13, height = 8.5, device = cairo_pdf)
+    
+    # Extract edge data and integrate into Table S3
+    if(nrow(res$net$arcs) > 0) {
+      edge_df <- as.data.frame(res$net$arcs) %>%
+        left_join(res$strength, by = c("from", "to")) %>%
+        mutate(Analysis_Group = st)
+      all_edges[[st]] <- edge_df
+    }
+  }
+}
+
+if(length(all_edges) > 0) {
+  write.csv(bind_rows(all_edges), "Table_S3_Bayesian_Consensus_Edges.csv", row.names = FALSE)
+  message("Execution Complete: Figure 3 and Table S3 successfully generated.")
+}

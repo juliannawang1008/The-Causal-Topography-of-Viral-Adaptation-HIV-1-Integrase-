@@ -1,0 +1,77 @@
+# ==============================================================================
+# Script 3: Figure 2 - Targeted GLasso Epistatic Network (STARS framework)
+# ==============================================================================
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(huge)
+  library(igraph)
+  library(ggraph)
+  library(tidygraph)
+  library(ggrepel)
+})
+
+# --- Prior Knowledge and Input Setup ---
+forest_sig_muts <- c("N27S", "S39N", "D3E", "D6E", "K215N", "A23V", "A21T", "N27G", "K14R", "D25E", "I135V", "D167E", "T124A", "I72V", "K211R", "I84M", "T218I", "K136H", "T112I", "L234I", "T124N", "V31I")
+known_drm_positions <- c(66, 74, 92, 118, 138, 140, 143, 147, 148, 155, 163, 263)
+get_domain <- function(pos) { if(is.na(pos)) return("Unknown"); if(pos<=50) return("NTD (1-50)"); if(pos<=212) return("CCD (51-212)"); return("CTD (213-288)") }
+
+file_target <- "Matrix_Topological_Binary.csv"
+if (!file.exists(file_target)) stop("Error: Topological matrix file not found.")
+
+raw_data <- read.csv(file_target, stringsAsFactors = FALSE, check.names = FALSE)
+df_clean <- raw_data %>%
+  rename_with(~ "Treatment", any_of(c("Treatment_Group", "treatment_group"))) %>%
+  filter(!is.na(Treatment) & Treatment != "") %>%
+  mutate(Subtype = as.character(Subtype),
+         Analysis_Group_Raw = case_when(Subtype == "01_AE" ~ "CRF01_AE (Dominant Lineage)", Subtype %in% c("07_BC", "08_BC", "C", "BC", "01C") ~ "CRF07/08_BC (Recombinants)", TRUE ~ "Others")) %>% 
+  filter(Analysis_Group_Raw != "Others")
+
+mut_cols <- setdiff(colnames(df_clean), intersect(names(df_clean), c("SequenceID", "Subtype", "Year", "Treatment", "Analysis_Group_Raw")))
+df_clean[mut_cols] <- lapply(df_clean[mut_cols], as.numeric)
+data_splits <- split(df_clean, df_clean$Analysis_Group_Raw)
+
+# --- Core Network Inference Method ---
+infer_glasso_network <- function(sub_df) {
+  mat <- as.matrix(sub_df[, mut_cols, drop = FALSE])
+  freq <- colMeans(mat, na.rm = TRUE)
+  mat <- mat[, freq > 0.01, drop = FALSE]
+  if (ncol(mat) < 5) return(NULL)
+  
+  gl_path <- huge(mat, method = "glasso", verbose = FALSE)
+  gl_opt <- suppressWarnings(huge.select(gl_path, criterion = "stars", stars.thresh = 0.05, verbose = FALSE))
+  icov <- as.matrix(gl_opt$opt.icov)
+  
+  # Adaptive compensation for extreme sparsity
+  if (sum(icov != 0) <= ncol(icov)) { for (i in length(gl_path$icov):1) { temp_icov <- as.matrix(gl_path$icov[[i]]); if (sum(temp_icov != 0) > ncol(temp_icov) + 6) { icov <- temp_icov; break } } }
+  
+  colnames(icov) <- rownames(icov) <- colnames(mat)
+  pcor <- -sweep(sweep(icov, 1, sqrt(diag(icov)), "/"), 2, sqrt(diag(icov)), "/")
+  diag(pcor) <- 0
+  edges <- as.data.frame(as.table(pcor)) %>% filter(Freq != 0, Var1 < Var2) %>% rename(Weight = Freq, Source = Var1, Target = Var2) %>% mutate(Interaction = ifelse(Weight > 0, "Positive Co-occurrence", "Negative Repulsion"))
+  
+  if (nrow(edges) == 0) return(NULL) 
+  nodes_df <- data.frame(name = unique(c(edges$Source, edges$Target)), stringsAsFactors = FALSE)
+  g <- tbl_graph(nodes = nodes_df, edges = edges, directed = FALSE) %>% activate(nodes) %>% mutate(Mutation = name, Position = as.numeric(str_extract(name, "\\d+")), Domain = sapply(Position, get_domain), Centrality = centrality_degree(), is_forest = Mutation %in% forest_sig_muts, is_drm = Position %in% known_drm_positions, Node_Type = case_when(is_forest ~ "Forest Plot Significant", is_drm ~ "Known DRMs (WHO/IAS)", TRUE ~ "Novel/Polymorphisms"), Is_Top_Hub = dense_rank(desc(Centrality)) <= 3 | Centrality >= 5, Final_Label = ifelse(Node_Type != "Novel/Polymorphisms" | Is_Top_Hub, Mutation, NA)) %>% filter(Centrality > 0)
+  return(g)
+}
+
+# --- Output Rendering Core Loop ---
+all_network_stats <- list() 
+for (grp in names(data_splits)) {
+  g_net <- infer_glasso_network(data_splits[[grp]])
+  if (!is.null(g_net) && gorder(g_net) > 0) {
+    p <- ggraph(g_net, layout = "fr") + geom_edge_link(aes(color = Interaction, alpha = abs(Weight), width = abs(Weight))) + scale_edge_color_manual(values = c("Positive Co-occurrence"="#F39B7FFF", "Negative Repulsion"="#3C5488FF")) + scale_edge_alpha(range = c(0.2, 0.8), guide = "none") + scale_edge_width_continuous(range = c(0.4, 1.8), guide = "none") + geom_node_point(aes(color = Domain, shape = Node_Type, size = Centrality), stroke = 0.5) + scale_color_manual(values = c("NTD (1-50)"="#4DBBD5FF", "CCD (51-212)"="#00A087FF", "CTD (213-288)"="#E64B35FF", "Unknown"="grey80")) + scale_shape_manual(values = c("Forest Plot Significant"=15, "Known DRMs (WHO/IAS)"=17, "Novel/Polymorphisms"=16)) + scale_size_continuous(range = c(1.5, 6.5), guide = "none") + geom_node_text(aes(label = Final_Label), repel = TRUE, size = 3.8, fontface = "bold", bg.color = "white", bg.r = 0.15, max.overlaps = 50, color = "#222222") + theme_graph(base_family = "sans") + theme(legend.position = "bottom", legend.box = "vertical") + labs(title = paste0("Targeted Epistatic Network: ", grp))
+    
+    # Precisely match the output filenames
+    if(grp == "CRF01_AE (Dominant Lineage)") { plot_file <- "Figure2_Epistatic_Cooccurrence_GLasso.pdf" } 
+    else { plot_file <- "Figure2_Epistatic_Cooccurrence_GLasso_BC-Related lineages.pdf" }
+    ggsave(plot_file, plot = p, width = 10, height = 9, scale = 1.1, device = grDevices::cairo_pdf)
+    
+    node_stats <- as_tibble(g_net) %>% select(Mutation, Position, Domain, Node_Type, Centrality, Is_Top_Hub) %>% arrange(desc(Centrality)) %>% mutate(Analysis_Group = grp)
+    all_network_stats[[grp]] <- node_stats
+  }
+}
+if (length(all_network_stats) > 0) {
+  write.csv(bind_rows(all_network_stats), "Table_S2_Topology_Centrality_Scores.csv", row.names = FALSE)
+  message("Execution Complete: Figure 2 and Table S2 successfully generated.")
+}
