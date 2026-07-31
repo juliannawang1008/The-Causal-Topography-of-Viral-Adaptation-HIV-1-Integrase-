@@ -1,0 +1,86 @@
+Analysis_Group,Mutation,Position,Biological Domain,Clinical Significance,Degree/Hub Score
+CRF01_AE,G193E,193,CCD (51-212),Novel/Polymorphisms,7
+CRF01_AE,A21T,21,NTD (1-50),Forest Plot Significant,6
+CRF01_AE,A23V,23,NTD (1-50),Forest Plot Significant,5
+CRF01_AE,K14R,14,NTD (1-50),Forest Plot Significant,4
+CRF01_AE,S39N,39,NTD (1-50),Forest Plot Significant,4
+CRF01_AE,S119P,119,CCD (51-212),Novel/Polymorphisms,4
+CRF01_AE,D286N,286,CTD (213-288),Novel/Polymorphisms,3
+CRF01_AE,T124A,124,CCD (51-212),Forest Plot Significant,3
+CRF01_AE,K111Q,111,CCD (51-212),Novel/Polymorphisms,3
+CRF01_AE,L234I,234,CTD (213-288),Forest Plot Significant,3
+CRF01_AE,L234T,234,CTD (213-288),Novel/Polymorphisms,3
+CRF01_AE,D41N,41,NTD (1-50),Novel/Polymorphisms,2
+CRF01_AE,K136R,136,CCD (51-212),Novel/Polymorphisms,2
+CRF01_AE,E11D,11,NTD (1-50),Novel/Polymorphisms,2
+CRF01_AE,N27G,27,NTD (1-50),Forest Plot Significant,2
+CRF01_AE,D25E,25,NTD (1-50),Forest Plot Significant,2
+CRF01_AE,I135V,135,CCD (51-212),Forest Plot Significant,2
+CRF01_AE,I208M,208,CCD (51-212),Novel/Polymorphisms,2
+CRF01_AE,L101I,101,CCD (51-212),Novel/Polymorphisms,2
+CRF01_AE,R20K,20,NTD (1-50),Novel/Polymorphisms,2
+CRF01_AE,T112I,112,CCD (51-212),Forest Plot Significant,1
+CRF01_AE,G134D,134,CCD (51-212),Novel/Polymorphisms,1
+CRF01_AE,I113V,113,CCD (51-212),Novel/Polymorphisms,1
+CRF01_AE,S283D,283,CTD (213-288),Novel/Polymorphisms,1
+CRF01_AE,I72V,72,CCD (51-212),Forest Plot Significant,1
+CRF01_AE,L63I,63,CCD (51-212),Novel/Polymorphisms,1
+CRF01_AE,K136Q,136,CCD (51-212),Novel/Polymorphisms,1
+CRF01_AE,D288N,288,CTD (213-288),Novel/Polymorphisms,1
+CRF01_AE,D279G,279,CTD (213-288),Novel/Polymorphisms,1
+CRF01_AE,D232E,232,CTD (213-288),Novel/Polymorphisms,1
+CRF01_AE,G106A,106,CCD (51-212),Novel/Polymorphisms,1
+CRF01_AE,G193D,193,CCD (51-212),Novel/Polymorphisms,1
+CRF01_AE,T112V,112,CCD (51-212),Novel/Polymorphisms,1
+CRF01_AE,G134N,134,CCD (51-212),Novel/Polymorphisms,1
+CRF01_AE,S283G,283,CTD (213-288),Novel/Polymorphisms,1
+CRF01_AE,L74I,74,CCD (51-212),Known DRMs (WHO/IAS),1
+CRF01_AE,S17N,17,NTD (1-50),Novel/Polymorphisms,1
+CRF01_AE,R284G,284,CTD (213-288),Novel/Polymorphisms,1
+CRF01_AE,D3E,3,NTD (1-50),Forest Plot Significant,1
+CRF01_AE,T124G,124,CCD (51-212),Novel/Polymorphisms,1
+CRF01_AE,T124N,124,CCD (51-212),Forest Plot Significant,1
+CRF01_AE,V281M,281,CTD (213-288),Novel/Polymorphisms,1
+CRF01_AE,L234V,234,CTD (213-288),Novel/Polymorphisms,1
+CRF01_AE,T124S,124,CCD (51-212),Novel/Polymorphisms,1
+CRF01_AE,S195C,195,CCD (51-212),Novel/Polymorphisms,1
+BC_related,I135L,135,CCD (51-212),Novel/Polymorphisms,10
+BC_related,K136Q,136,CCD (51-212),Novel/Polymorphisms,9
+BC_related,T218I,218,CTD (213-288),Forest Plot Significant,6
+BC_related,L234I,234,CTD (213-288),Forest Plot Significant,5
+BC_related,V201I,201,CCD (51-212),Novel/Polymorphisms,5
+BC_related,T124A,124,CCD (51-212),Forest Plot Significant,4
+BC_related,K42Q,42,NTD (1-50),Novel/Polymorphisms,4
+BC_related,S24N,24,NTD (1-50),Novel/Polymorphisms,4
+BC_related,K211R,211,CCD (51-212),Forest Plot Significant,3
+BC_related,G163E,163,CCD (51-212),Known DRMs (WHO/IAS),3
+BC_related,I84M,84,CCD (51-212),Forest Plot Significant,3
+BC_related,L234S,234,CTD (213-288),Novel/Polymorphisms,3
+BC_related,D278A,278,CTD (213-288),Novel/Polymorphisms,2
+BC_related,A205S,205,CCD (51-212),Novel/Polymorphisms,2
+BC_related,T112V,112,CCD (51-212),Novel/Polymorphisms,2
+BC_related,K14R,14,NTD (1-50),Forest Plot Significant,2
+BC_related,T124N,124,CCD (51-212),Forest Plot Significant,2
+BC_related,T112I,112,CCD (51-212),Forest Plot Significant,1
+BC_related,T112A,112,CCD (51-212),Novel/Polymorphisms,1
+BC_related,S283D,283,CTD (213-288),Novel/Polymorphisms,1
+BC_related,E11D,11,NTD (1-50),Novel/Polymorphisms,1
+BC_related,L45I,45,NTD (1-50),Novel/Polymorphisms,1
+BC_related,I220V,220,CTD (213-288),Novel/Polymorphisms,1
+BC_related,K136N,136,CCD (51-212),Novel/Polymorphisms,1
+BC_related,K136H,136,CCD (51-212),Forest Plot Significant,1
+BC_related,E157Q,157,CCD (51-212),Novel/Polymorphisms,1
+BC_related,H171Q,171,CCD (51-212),Novel/Polymorphisms,1
+BC_related,K188R,188,CCD (51-212),Novel/Polymorphisms,1
+BC_related,T125A,125,CCD (51-212),Novel/Polymorphisms,1
+BC_related,I135V,135,CCD (51-212),Forest Plot Significant,1
+BC_related,S283G,283,CTD (213-288),Novel/Polymorphisms,1
+BC_related,R269K,269,CTD (213-288),Novel/Polymorphisms,1
+BC_related,L74I,74,CCD (51-212),Known DRMs (WHO/IAS),1
+BC_related,K136R,136,CCD (51-212),Novel/Polymorphisms,1
+BC_related,K42R,42,NTD (1-50),Novel/Polymorphisms,1
+BC_related,K160T,160,CCD (51-212),Novel/Polymorphisms,1
+BC_related,S119P,119,CCD (51-212),Novel/Polymorphisms,1
+BC_related,T124S,124,CCD (51-212),Novel/Polymorphisms,1
+BC_related,R187K,187,CCD (51-212),Novel/Polymorphisms,1
+BC_related,I72T,72,CCD (51-212),Novel/Polymorphisms,1
